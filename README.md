@@ -1,21 +1,39 @@
+
 # NetJar MonTool 🌐🫙
 
-O unealtă modulară de monitorizare și administrare a rețelei concepută pentru Linux, construită în **Python 3** și **PyQt6**. Aplicația împarte logica de control în module independente și oferid suport simetric pentru trei limbi (RO / EN / IT).
+[RO] O unealtă modulară de monitorizare și administrare a rețelei concepută pentru Linux, construită în Python 3 și PyQt6.
+[EN] A modular network monitoring and administration suite for Linux, built with Python 3 and PyQt6.
+[IT] Una suite modulare di monitoraggio e amministrazione della rete per Linux, creata con Python 3 e PyQt6.
 
-## 🚀 Caracteristici Principale / Key Features / Caratteristiche
+---
 
-*   **🔍 Scanner & Pinger (RO/EN/IT):** Detectează automat dispozitivele active din rețeaua locală și din rețeaua Tailscale. Dispune de un sistem contextual de click-dreapta pentru a copia instantaneu adresa IP în clipboard-ul sistemului Linux.
-*   **🖥️ SSH Launcher:** Un panou administrativ de unde poți salva conexiunile favorite (utilizator, etichetă, IP). La dublu-click, aplicația invocă terminalul nativ `io.elementary.terminal` pentru a lansa sesiunea direct.
-*   **📊 Traffic Monitor & Speedometer:** Monitorizează în timp real consumul de bandă (Download/Upload) direct din kernel (`/proc/net/dev`) și desenează un grafic ASCII dinamic. Include un test de viteză maximă bazat pe `speedtest-cli`.
-*   **ℹ️ Whois / DNS Query:** Investighează identitatea IP-urilor sau domeniilor publice, păstrând un istoric continuu în consolă (append log). Rulează un Whois local corelând tabela ARP cu vendorul plăcii de rețea.
-*   **📡 Wi-Fi Scanner & Easter Egg:** Scanează rețelele wireless din eter folosind `nmcli`.
-    *   **🚨 ACTIVATE LASER BEAM:** Butonul secret care destabilizează routerele clasice din Cecina și le transformă în murături cibernetice mutante (Gogonele Radioactive, Butoiul Cybernetic), traduse simetric pe limbi și luminate în verde!
+## 🇷🇴 Română — Ghid de Utilizare
 
-## 📋 Prerequisites & Run
+### 🚀 Caracteristici Principale
+*   **🔍 Scanner & Pinger:** Detectează automat dispozitivele active din rețeaua locală și Tailscale. Click-               dreapta pentru copiere IP.
+*   **🖥️ SSH Launcher:** Salvează conexiunile favorite. Lansare directă în terminalul nativ `                              io.elementary.terminal`.
+*   **📊 Traffic Monitor:** Monitorizează consumul de bandă (Download/Upload) în timp real direct din kernel.
+*   **ℹ️ Whois / DNS Query:** Investighează domeniile publice, păstrând un istoric continuu în consolă.
+*   **📡 Wi-Fi Scanner & Laser:** Scanează rețelele cu `nmcli`.
+    *   **🚨 ACTIVARE RAZĂ LASER:** Transforma routerele din Cecina în murături cibernetice mutante verzi!
 
-```bash
-sudo apt update
-sudo apt install python3-pyqt6 speedtest-cli whois
-python3 netjar_main.py
-```
-# NetJar_MonTool
+---
+
+## 🇬🇧 English — User Guide
+
+### 🚀 Key Features
+*   **🔍 Scanner & Pinger:** Automatically detects active devices in local and Tailscale networks. Right-click to          copy IP.
+*   **🖥️ SSH Launcher:** Save your favorite hosts. Double-click launches a session directly in                             io.elementary.terminal`.
+*   **📊 Traffic Monitor:** Real-time bandwidth usage (Download/Upload) read directly from the Linux kernel.
+*   **ℹ️ Whois / DNS Query:** Public domain and IP investigation with continuous console log history.
+*   **📡 Wi-Fi Scanner & Easter Egg:** Scans wireless networks via `nmcli`.   *   **🚨 ACTIVATE LASER BEAM:**              Secret button that transforms standard routers into mutant radioactive green pickles!                    ---
+
+## 🇮🇹 Italiano — Guida Utente
+
+### 🚀 Caratteristiche Principali
+*   **🔍 Scanner & Pinger:** Rileva automaticamente i dispositivi attivi nella rete locale e Tailscale. Tasto              destro per copiare l'IP.
+*   **🖥️ SSH Launcher:** Salva i server preferiti. Doppio clic per avviare la sessione direttamente in `                   io.elementary.terminal`.
+*   **📊 Monitor Traffico:** Monitoraggio della larghezza di banda (Download/Upload) in tempo reale direttamente           dal kernel.
+*   **ℹ️ Whois / Query DNS:** Investigazione di domini e IP con cronologia continua nella console.
+*   **📡 Scanner Wi-Fi e Easter Egg:** Scansiona le reti wireless vicine tramite `nmcli`.
+*   **🚨 ATTIVA RAGGIO LASER:** Pulsante segreto che trasforma i router di Cecina in sottaceti cibernetici                 mutanti verdi!
