@@ -18,3 +18,4 @@ sudo apt update
 sudo apt install python3-pyqt6 speedtest-cli whois
 python3 netjar_main.py
 ```
+# NetJar_MonTool
