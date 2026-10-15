@@ -1,6 +1,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon  # <-- Aceasta este linia salvatoare adăugată!
 
 # Importăm modulele independente din folderul GUI
 from gui.scanner_widget import ScannerWidget
@@ -18,6 +19,8 @@ class NetJarMonTool(QMainWindow):
         self.resize(1000, 720)
         self.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; font-family: Arial;")
         
+        from PyQt6.QtGui import QIcon
+        self.setWindowIcon(self.creeaza_icoana_generata())
         self.init_ui()
 
     def init_ui(self):
@@ -100,6 +103,46 @@ class NetJarMonTool(QMainWindow):
         # 3. Declanșăm funcția de traducere din interiorul modulului Wi-Fi!
         if hasattr(self.widget_wifi, 'actualizeaza_limba'):
             self.widget_wifi.actualizeaza_limba()
+
+    def creeaza_icoana_generata(self):
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush
+        from PyQt6.QtCore import QPointF, QRectF
+        
+        # Creăm o pânză curată de înaltă rezoluție (64x64 pixeli)
+        pixmap = QPixmap(64, 64)
+        pixmap.fill(QColor("#1e1e2e")) # Fundalul închis Catppuccin Mocha
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 1. Desenăm corpul borcanului (Sticlă transparentă neon)
+        pen_borcan = QPen(QColor("#cdd6f4"), 3)
+        painter.setPen(pen_borcan)
+        painter.setBrush(QBrush(QColor(49, 50, 68, 100))) # Sticlă semi-transparentă
+        rect_borcan = QRectF(14, 18, 36, 40)
+        painter.drawRoundedRect(rect_borcan, 6, 6)
+        
+        # 2. Desenăm capacul de metal (Portocaliu branding)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#fab387")))
+        rect_capac = QRectF(20, 11, 24, 6)
+        painter.drawRoundedRect(rect_capac, 2, 2)
+        
+        # 3. Desenăm undele Wi-Fi digitale înăuntrul borcanului (Verde neon)
+        pen_wifi = QPen(QColor("#a6e3a1"), 2)
+        painter.setPen(pen_wifi)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawArc(QRectF(22, 26, 20, 20), 30 * 16, 120 * 16)
+        painter.drawArc(QRectF(26, 32, 12, 12), 30 * 16, 120 * 16)
+        
+        # 4. Desenăm nodul central (Bulina de rețea)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#fab387")))
+        painter.drawEllipse(30, 42, 4, 4)
+        
+        painter.end()
+        return QIcon(pixmap)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
