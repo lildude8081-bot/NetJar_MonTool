@@ -100,6 +100,10 @@ class NetJarMonTool(QMainWindow):
         # 3. Declanșăm funcția de traducere din interiorul modulului Wi-Fi!
         if hasattr(self.widget_wifi, 'actualizeaza_limba'):
             self.widget_wifi.actualizeaza_limba()
+        if hasattr(self, "widget_whois"): self.widget_whois.actualizeaza_limba()
+        if hasattr(self, "widget_traffic"): self.widget_traffic.actualizeaza_limba()
+        if hasattr(self, "widget_ssh"): self.widget_ssh.actualizeaza_limba()
+        if hasattr(self, "widget_scanner"): self.widget_scanner.actualizeaza_limba()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

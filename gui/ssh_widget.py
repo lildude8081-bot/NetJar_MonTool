@@ -1,113 +1,184 @@
 import os
 import json
-import subprocess
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget, QListWidgetItem, QLineEdit, QMessageBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QListWidget, QMessageBox
 from PyQt6.QtCore import Qt
 
 class SSHLauncherWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.cale_json = os.path.join(os.path.dirname(__file__), "..", "assets", "ssh_hosts.json")
+    def __init__(self, parent_win=None):
+        super().__init__(parent_win)
+        self.parent_win = parent_win
+        self.cale_baza = "assets/ssh_hosts.json"
         
-        layout_principal = QVBoxLayout(self)
-        layout_principal.setContentsMargins(15, 15, 15, 15)
-        layout_principal.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
 
-        lbl_info = QLabel("🖥️ Gestionare Conexiuni SSH Rapide:", self)
-        lbl_info.setStyleSheet("font-size: 14px; font-weight: bold; color: #fab387;")
-        layout_principal.addWidget(lbl_info)
+        # Dicționarul simetric complet pentru tab-ul SSH Launcher
+        self.traduceri = {
+            "ro": {
+                "lbl_info": "🖥️ Gestionare Conexiuni SSH Rapide:",
+                "btn_adauga": "➕ Adaugă",
+                "btn_lanseaza": "🚀 Pornește Sesiune SSH",
+                "btn_sterge": "🗑️ Șterge",
+                "ph_eticheta": "Etichetă (ex: Laptop Iasmina)",
+                "ph_user": "Utilizator (ex: iasmina)",
+                "ph_ip": "IP (ex: 100.75.72.60)",
+                "err_campuri": "Eroare: Toate câmpurile trebuie completate!",
+                "err_selectie": "Selectați o conexiune din listă mai întâi!"
+            },
+            "en": {
+                "lbl_info": "🖥️ Manage Quick SSH Connections:",
+                "btn_adauga": "➕ Add Host",
+                "btn_lanseaza": "🚀 Launch SSH Session",
+                "btn_sterge": "🗑️ Delete",
+                "ph_eticheta": "Label (e.g., Iasmina's Laptop)",
+                "ph_user": "Username (e.g., iasmina)",
+                "ph_ip": "IP (e.g., 100.75.72.60)",
+                "err_campuri": "Error: All fields must be completed!",
+                "err_selectie": "Please select a connection from the list first!"
+            },
+            "it": {
+                "lbl_info": "🖥️ Gestione Connessioni SSH Rapide:",
+                "btn_adauga": "➕ Aggiungi",
+                "btn_lanseaza": "🚀 Avvia Sessione SSH",
+                "btn_sterge": "🗑️ Elimina",
+                "ph_eticheta": "Etichetta (es: Laptop Iasmina)",
+                "ph_user": "Utente (es: iasmina)",
+                "ph_ip": "IP (es: 100.75.72.60)",
+                "err_campuri": "Errore: Tutti i campi devono essere compilati!",
+                "err_selectie": "Seleziona prima una connessione dalla lista!"
+            }
+        }
 
-        layout_formular = QHBoxLayout()
+        # Rând superior fluid pentru adăugare
+        layout_inputuri = QHBoxLayout()
+        layout_inputuri.setSpacing(8)
+        
+        self.lbl_info = QLabel(self)
+        self.lbl_info.setStyleSheet("font-size: 13px; font-weight: bold; color: #a6adc8;")
+        layout.addWidget(self.lbl_info)
+
         self.input_eticheta = QLineEdit(self)
-        self.input_eticheta.setPlaceholderText("Etichetă (ex: Laptop Iasmina)")
-        self.input_eticheta.setStyleSheet("background-color: #313244; color: #cdd6f4; border: 1px solid #45475a; padding: 6px; border-radius: 4px;")
-        
         self.input_user = QLineEdit(self)
-        self.input_user.setPlaceholderText("Utilizator (ex: iasmina)")
-        self.input_user.setStyleSheet("background-color: #313244; color: #cdd6f4; border: 1px solid #45475a; padding: 6px; border-radius: 4px;")
-        
         self.input_ip = QLineEdit(self)
-        self.input_ip.setPlaceholderText("IP (ex: 100.75.72.60)")
-        self.input_ip.setStyleSheet("background-color: #313244; color: #cdd6f4; border: 1px solid #45475a; padding: 6px; border-radius: 4px;")
         
-        self.btn_adauga = QPushButton("➕ Adaugă", self)
-        self.btn_adauga.setStyleSheet("background-color: #a6e3a1; color: #11111b; font-weight: bold; padding: 6px 15px;")
-        self.btn_adauga.clicked.connect(self.adauga_host)
-        
-        layout_formular.addWidget(self.input_eticheta)
-        layout_formular.addWidget(self.input_user)
-        layout_formular.addWidget(self.input_ip)
-        layout_formular.addWidget(self.btn_adauga)
-        layout_principal.addLayout(layout_formular)
+        stil_input = "QLineEdit { background-color: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 5px; padding: 5px 8px; font-size: 12px; }"
+        for inp in [self.input_eticheta, self.input_user, self.input_ip]:
+            inp.setStyleSheet(stil_input)
+            layout_inputuri.addWidget(inp)
 
+        self.btn_adauga = QPushButton(self)
+        self.btn_adauga.setStyleSheet("QPushButton { background-color: #a6e3a1; color: #11111b; font-weight: bold; border-radius: 5px; padding: 6px 15px; font-size: 12px; }")
+        self.btn_adauga.clicked.connect(self.adauga_conexiune)
+        layout_inputuri.addWidget(self.btn_adauga)
+        layout.addLayout(layout_inputuri)
+
+        # Lista centrală de servere
         self.lista_hosturi = QListWidget(self)
-        self.lista_hosturi.setStyleSheet("background-color: #181825; color: #cdd6f4; border: 1px solid #313244; font-size: 14px;")
-        self.lista_hosturi.itemDoubleClicked.connect(self.lanseaza_ssh)
-        layout_principal.addWidget(self.lista_hosturi)
+        self.lista_hosturi.setStyleSheet("QListWidget { background-color: #181825; color: #cdd6f4; border: 1px solid #313244; border-radius: 6px; padding: 5px; font-size: 14px; } QListWidget::item:selected { background-color: #45475a; color: #fab387; }")
+        self.lista_hosturi.itemDoubleClicked.connect(self.lanseaza_ssh_direct)
+        layout.addWidget(self.lista_hosturi)
 
-        layout_butoane = QHBoxLayout()
-        self.btn_conecteaza = QPushButton("🚀 Pornește Sesiune SSH", self)
-        self.btn_conecteaza.setStyleSheet("background-color: #fab387; color: #11111b; font-weight: bold; padding: 8px 20px;")
-        self.btn_conecteaza.clicked.connect(lambda: self.lanseaza_ssh(self.lista_hosturi.currentItem()))
+        # Rând inferior pentru acțiuni rapide
+        layout_jos = QHBoxLayout()
+        self.btn_lanseaza = QPushButton(self)
+        self.btn_lanseaza.setStyleSheet("QPushButton { background-color: #fab387; color: #11111b; font-weight: bold; border-radius: 5px; padding: 7px 18px; font-size: 12px; }")
+        self.btn_lanseaza.clicked.connect(self.lanseaza_ssh_direct)
         
-        self.btn_sterge = QPushButton("🗑️ Șterge", self)
-        self.btn_sterge.setStyleSheet("background-color: #f38ba8; color: #11111b; font-weight: bold; padding: 8px 15px;")
-        self.btn_sterge.clicked.connect(self.sterge_host)
+        self.btn_sterge = QPushButton(self)
+        self.btn_sterge.setStyleSheet("QPushButton { background-color: #f38ba8; color: #11111b; font-weight: bold; border-radius: 5px; padding: 7px 18px; font-size: 12px; }")
+        self.btn_sterge.clicked.connect(self.sterge_conexiune)
         
-        layout_butoane.addWidget(self.btn_conecteaza)
-        layout_butoane.addStretch()
-        layout_butoane.addWidget(self.btn_sterge)
-        layout_principal.addLayout(layout_butoane)
+        layout_jos.addWidget(self.btn_lanseaza)
+        layout_jos.addStretch()
+        layout_jos.addWidget(self.btn_sterge)
+        layout.addLayout(layout_jos)
 
         self.incarca_hosturi()
+        self.actualizeaza_limba()
+
+    def obtine_limba_curenta(self):
+        if self.parent_win and hasattr(self.parent_win, 'limba_curenta'):
+            return self.parent_win.limba_curenta
+        return "ro"
+
+    def actualizeaza_limba(self):
+        """ Schimbă din mers textele ferestrei în funcție de limba aleasă global """
+        L = self.traduceri[self.obtine_limba_curenta()]
+        self.lbl_info.setText(L["lbl_info"])
+        self.btn_adauga.setText(L["btn_adauga"])
+        self.btn_lanseaza.setText(L["btn_lanseaza"])
+        self.btn_sterge.setText(L["btn_sterge"])
+        
+        # Actualizăm ghidajele text (Placeholders)
+        self.input_eticheta.setPlaceholderText(L["ph_eticheta"])
+        self.input_user.setPlaceholderText(L["ph_user"])
+        self.input_ip.setPlaceholderText(L["ph_ip"])
 
     def incarca_hosturi(self):
         self.lista_hosturi.clear()
-        if os.path.exists(self.cale_json):
+        if os.path.exists(self.cale_baza):
             try:
-                with open(self.cale_json, "r", encoding="utf-8") as f:
-                    gazde = json.load(f)
-                    for g in gazde:
-                        item = QListWidgetItem(f"🖥️ {g['eticheta']}  👉  {g['user']}@{g['ip']}")
-                        item.setData(Qt.ItemDataRole.UserRole, g)
-                        self.lista_hosturi.addItem(item)
+                with open(self.cale_baza, "r") as f:
+                    date = json.load(f)
+                    for item in date:
+                        text_afisat = f"🖥️ {item['eticheta']}  -->  {item['user']}@{item['ip']}"
+                        self.lista_hosturi.addItem(text_afisat)
             except Exception: pass
 
-    def adauga_host(self):
-        eticheta = self.input_eticheta.text().strip()
-        user = self.input_user.text().strip()
-        ip = self.input_ip.text().strip()
-        if not eticheta or not user or not ip: return
-
-        gazde = []
-        if os.path.exists(self.cale_json):
+    def adauga_conexiune(self):
+        L = self.traduceri[self.obtine_limba_curenta()]
+        e = self.input_eticheta.text().strip()
+        u = self.input_user.text().strip()
+        i = self.input_ip.text().strip()
+        
+        if not e or not u or not i:
+            QMessageBox.warning(self, "Error", L["err_campuri"])
+            return
+            
+        date_existente = []
+        if os.path.exists(self.cale_baza):
             try:
-                with open(self.cale_json, "r", encoding="utf-8") as f: gazde = json.load(f)
+                with open(self.cale_baza, "r") as f: date_existente = json.load(f)
             except Exception: pass
-        gazde.append({"eticheta": eticheta, "user": user, "ip": ip})
-        os.makedirs(os.path.dirname(self.cale_json), exist_ok=True)
-        with open(self.cale_json, "w", encoding="utf-8") as f: json.dump(gazde, f, indent=4)
+            
+        date_existente.append({"eticheta": e, "user": u, "ip": i})
+        os.makedirs(os.path.dirname(self.cale_baza), exist_ok=True)
+        with open(self.cale_baza, "w") as f: json.dump(date_existente, f, indent=4)
+        
         self.input_eticheta.clear()
         self.input_user.clear()
         self.input_ip.clear()
         self.incarca_hosturi()
 
-    def sterge_host(self):
-        item_curent = self.lista_hosturi.currentItem()
-        if not item_curent: return
-        date_gazda = item_curent.data(Qt.ItemDataRole.UserRole)
-        if os.path.exists(self.cale_json):
+    def sterge_conexiune(self):
+        L = self.traduceri[self.obtine_limba_curenta()]
+        rand = self.lista_hosturi.currentRow()
+        if rand == -1:
+            QMessageBox.warning(self, "Error", L["err_selectie"])
+            return
+            
+        if os.path.exists(self.cale_baza):
             try:
-                with open(self.cale_json, "r", encoding="utf-8") as f: gazde = json.load(f)
-                gazde = [g for g in gazde if not (g['eticheta'] == date_gazda['eticheta'] and g['ip'] == date_gazda['ip'])]
-                with open(self.cale_json, "w", encoding="utf-8") as f: json.dump(gazde, f, indent=4)
+                with open(self.cale_baza, "r") as f: date = json.load(f)
+                if rand < len(date):
+                    date.pop(rand)
+                    with open(self.cale_baza, "w") as f: json.dump(date, f, indent=4)
             except Exception: pass
         self.incarca_hosturi()
 
-    def lanseaza_ssh(self, item):
-        if not item: return
-        date_gazda = item.data(Qt.ItemDataRole.UserRole)
-        # Executăm o sesiune curată apelând terminalul nativ din elementary OS
-        comanda_terminal = f"io.elementary.terminal -e 'ssh {date_gazda['user']}@{date_gazda['ip']}'"
-        try: subprocess.Popen(comanda_terminal, shell=True)
-        except Exception as e: QMessageBox.critical(self, "Eroare", str(e))
+    def lanseaza_ssh_direct(self):
+        L = self.traduceri[self.obtine_limba_curenta()]
+        rand = self.lista_hosturi.currentRow()
+        if rand == -1:
+            QMessageBox.warning(self, "Error", L["err_selectie"])
+            return
+            
+        if os.path.exists(self.cale_baza):
+            try:
+                with open(self.cale_baza, "r") as f: date = json.load(f)
+                if rand < len(date):
+                    item = date[rand]
+                    # Invocăm terminalul nativ io.elementary.terminal din elementary OS
+                    os.system(f"io.elementary.terminal -e 'ssh {item['user']}@{item['ip']}' &")
+            except Exception: pass

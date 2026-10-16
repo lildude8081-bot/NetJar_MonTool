@@ -1,8 +1,6 @@
 import subprocess
-import socket
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QTableWidget, QTableWidgetItem, 
-                             QHeaderView, QProgressBar, QMessageBox)
+import re
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 class ScannerWorker(QThread):
@@ -12,124 +10,131 @@ class ScannerWorker(QThread):
 
     def run(self):
         self.progres.emit(10)
-        
-        # 1. SCANARE TAILSCALE CLARĂ
         try:
-            rezultat = subprocess.check_output(["tailscale", "status"], text=True)
-            for linie in rezultat.strip().split('\n'):
-                if linie:
-                    parti = linie.split()
-                    if len(parti) >= 2:
-                        ip = parti[0]
-                        nume = parti[1]
-                        
-                        if "offline" in linie.lower():
-                            stare = "🔴 Offline"
-                        else:
-                            stare = "🟢 Online"
-                            
-                        if "100." in ip:
-                            self.dispozitiv_gasit.emit(nume, ip, stare)
+            # Preluăm IP-ul local pentru a afla clasa de rețea
+            cmd_ip = subprocess.check_output(["hostname", "-I"], text=True).strip().split()[0]
+            baza_ip = ".".join(cmd_ip.split(".")[:3]) + ".0/24"
         except Exception:
-            pass
+            baza_ip = "192.168.1.0/24"
 
-        self.progres.emit(40)
-        
-        # 2. SCANARE REȚEA LOCALĂ
+        self.progres.emit(30)
+        # Scanare rapidă ARP locală
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            baza_ip = ".".join(s.getsockname().split(".")[:3]) + "."
-            s.close()
-        except Exception:
-            baza_ip = "192.168.0."
+            arp_out = subprocess.check_output(["arp", "-an"], text=True)
+            for linie in arp_out.split("\n"):
+                match = re.search(r"\((.*?)\)â  \s+at\s+([0-9a-fA-F:]+)", linie)
+                if match:
+                    self.dispozitiv_gasit.emit("Dispozitiv Local", match.group(1), "Activ")
+        except Exception: pass
 
-        total_adrese = 30
-        for i in range(1, total_adrese + 1):
-            ip_tinta = f"{baza_ip}{i}"
-            raspuns = subprocess.run(["ping", "-c", "1", "-W", "1", ip_tinta], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if raspuns.returncode == 0:
-                self.dispozitiv_gasit.emit("Dispozitiv Local", ip_tinta, "🟢 Online")
-            self.progres.emit(40 + int((i / total_adrese) * 60))
+        self.progres.emit(70)
+        # Scanare rețea Tailscale dacă există
+        try:
+            ts_out = subprocess.check_output(["tailscale", "status"], text=True)
+            for linie in ts_out.split("\n"):
+                parti = linie.split()
+                if len(parti) >= 2 and not linie.startswith("#"):
+                    self.dispozitiv_gasit.emit(parti[1], parti[0], "Online (TS)")
+        except Exception: pass
 
         self.progres.emit(100)
         self.finalizat.emit()
 
-
-class PingWorker(QThread):
-    """ Fir de execuție separat pentru a rula ping-ul manual fără a bloca interfața """
-    rezultat_ping = pyqtSignal(str)
-
-    def __init__(self, ip):
-        super().__init__()
-        self.ip = ip
-
-    def run(self):
-        try:
-            # Executăm 4 pachete de ping standard pe Linux
-            rezultat = subprocess.check_output(["ping", "-c", "4", self.ip], text=True, stderr=subprocess.STDOUT)
-            self.rezultat_ping.emit(rezultat)
-        except subprocess.CalledProcessError as e:
-            self.rezultat_ping.emit(e.output if e.output else "❌ Dispozitivul nu răspunde la ping (Timeout).")
-        except Exception as ex:
-            self.rezultat_ping.emit(f"❌ Eroare la execuție: {str(ex)}")
-
-
 class ScannerWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent_win=None):
+        super().__init__(parent_win)
+        self.parent_win = parent_win
+        
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(12)
 
-        # Bară de acțiuni superioară
+        # Dicționarul simetric complet pentru cele 3 limbi solicitate
+        self.traduceri = {
+            "ro": {
+                "lbl_info": "🔍 Scanner & Pinger (Local & Tailscale):",
+                "btn_scaneaza": "🔄 Scanează Rețeaua",
+                "btn_asteapta": "⏳ Scanare...",
+                "btn_ping": "⚡ Dă Ping Manual",
+                "headers": ["Nume Dispozitiv", "Adresă IP", "Stare"],
+                "ping_titlu": "Introduceți IP", "ping_prompt": "Adresă IP pentru Ping:",
+                "ping_ok": "Dispozitivul este activ!", "ping_err": "Dispozitivul nu răspunde!"
+            },
+            "en": {
+                "lbl_info": "🔍 Scanner & Pinger (Local & Tailscale):",
+                "btn_scaneaza": "🔄 Scan Network",
+                "btn_asteapta": "⏳ Scanning...",
+                "btn_ping": "⚡ Manual Ping",
+                "headers": ["Device Name", "IP Address", "Status"],
+                "ping_titlu": "Enter IP", "ping_prompt": "IP Address for Ping:",
+                "ping_ok": "Device is alive!", "ping_err": "Device destination unreachable!"
+            },
+            "it": {
+                "lbl_info": "🔍 Scanner & Pinger (Locale & Tailscale):",
+                "btn_scaneaza": "🔄 Scansiona Rete",
+                "btn_asteapta": "⏳ Scansione...",
+                "btn_ping": "⚡ Ping Manuale",
+                "headers": ["Nome Dispositivo", "Indirizzo IP", "Stato"],
+                "ping_titlu": "Inserisci IP", "ping_prompt": "Indirizzo IP per il Ping:",
+                "ping_ok": "Il dispositivo è attivo!", "ping_err": "Il dispositivo non risponde!"
+            }
+        }
+
+        # Rând superior fluid pentru acțiuni
         layout_actiuni = QHBoxLayout()
-        lbl_info = QLabel("🔍 Scanner & Pinger (Local & Tailscale):", self)
-        
-        self.btn_scaneaza = QPushButton("🔄 Scanează Rețeaua", self)
-        self.btn_scaneaza.setStyleSheet("background-color: #a6e3a1; color: #11111b; font-weight: bold; border-radius: 5px; padding: 8px 15px;")
-        self.btn_scaneaza.clicked.connect(self.porneste_scanarea)
-        
-        layout_actiuni.addWidget(lbl_info)
+        self.lbl_info = QLabel(self)
+        self.lbl_info.setStyleSheet("font-size: 13px; font-weight: bold; color: #a6adc8;")
+        layout_actiuni.addWidget(self.lbl_info)
         layout_actiuni.addStretch()
+
+        self.btn_scaneaza = QPushButton(self)
+        self.btn_scaneaza.setStyleSheet("QPushButton { background-color: #a6e3a1; color: #11111b; font-weight: bold; border-radius: 5px; padding: 6px 15px; font-size: 12px; }")
+        self.btn_scaneaza.clicked.connect(self.porneste_scanarea)
         layout_actiuni.addWidget(self.btn_scaneaza)
         layout.addLayout(layout_actiuni)
 
-        # Tabelul cu dispozitive
+        # Tabelul central
         self.tabel = QTableWidget(self)
         self.tabel.setColumnCount(3)
-        self.tabel.setHorizontalHeaderLabels(["Nume Dispozitiv", "Adresă IP", "Stare"])
         self.tabel.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tabel.setStyleSheet("background-color: #181825; color: #cdd6f4; gridline-color: #313244; font-size: 13px;")
-        self.tabel.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.tabel.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.tabel.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tabel.customContextMenuRequested.connect(self.deschide_meniu_contextual)
         layout.addWidget(self.tabel)
 
-        # Bară de acțiuni inferioară pentru PING MANUAL
+        # Rând inferior pentru Ping Manual
         layout_jos = QHBoxLayout()
-        self.btn_ping = QPushButton("⚡ Dă Ping Manual", self)
-        self.btn_ping.setStyleSheet("""
-            QPushButton { background-color: #fab387; color: #11111b; font-weight: bold; border-radius: 5px; padding: 8px 20px; font-size: 13px; }
-            QPushButton:hover { background-color: #f9e2af; }
-        """)
+        self.btn_ping = QPushButton(self)
+        self.btn_ping.setStyleSheet("QPushButton { background-color: #f9e2af; color: #11111b; font-weight: bold; border-radius: 5px; padding: 6px 15px; font-size: 12px; }")
         self.btn_ping.clicked.connect(self.executa_ping_manual)
         layout_jos.addWidget(self.btn_ping)
         layout_jos.addStretch()
         layout.addLayout(layout_jos)
 
-        self.bara_progres = QProgressBar(self)
-        self.bara_progres.setStyleSheet("QProgressBar::chunk { background-color: #fab387; }")
-        layout.addWidget(self.bara_progres)
+        self.actualizeaza_limba()
+
+    def obtine_limba_curenta(self):
+        if self.parent_win and hasattr(self.parent_win, 'limba_curenta'):
+            return self.parent_win.limba_curenta
+        return "ro"
+
+    def actualizeaza_limba(self):
+        """ Schimbă din mers textele tuturor componentelor în funcție de limba activă """
+        L = self.traduceri[self.obtine_limba_curenta()]
+        self.lbl_info.setText(L["lbl_info"])
+        self.btn_ping.setText(L["btn_ping"])
+        if self.btn_scaneaza.isEnabled():
+            self.btn_scaneaza.setText(L["btn_scaneaza"])
+        self.tabel.setHorizontalHeaderLabels(L["headers"])
 
     def porneste_scanarea(self):
+        self.actualizeaza_limba()
+        L = self.traduceri[self.obtine_limba_curenta()]
         self.btn_scaneaza.setEnabled(False)
+        self.btn_scaneaza.setText(L["btn_asteapta"])
         self.tabel.setRowCount(0)
+
         self.worker = ScannerWorker()
-        self.worker.progres.connect(self.bara_progres.setValue)
-        self.worker.dispozitiv_gasit.connect(self.adauga_dispozitiv)
-        self.worker.finalizat.connect(lambda: self.btn_scaneaza.setEnabled(True))
+        self.dispozitiv_gasit_conectat = self.worker.dispozitiv_gasit.connect(self.adauga_dispozitiv)
+        self.worker.finalizat.connect(self.scanare_terminata)
         self.worker.start()
 
     def adauga_dispozitiv(self, nume, ip, stare):
@@ -139,51 +144,17 @@ class ScannerWidget(QWidget):
         self.tabel.setItem(rand, 1, QTableWidgetItem(ip))
         self.tabel.setItem(rand, 2, QTableWidgetItem(stare))
 
+    def scanare_terminata(self):
+        self.btn_scaneaza.setEnabled(True)
+        self.actualizeaza_limba()
+
     def executa_ping_manual(self):
-        """ Preia IP-ul selectat din tabel și trimite pachetele de test """
-        rand_selectat = self.tabel.currentRow()
-        if rand_selectat == -1:
-            QMessageBox.warning(self, "Atenție", "Vă rugăm să selectați un dispozitiv din tabel mai întâi!")
-            return
-            
-        ip_tinta = self.tabel.item(rand_selectat, 1).text()
-        nume_tinta = self.tabel.item(rand_selectat, 0).text()
-        
-        self.btn_ping.setEnabled(False)
-        self.btn_ping.setText("⏳ Se trimit pachete...")
-        
-        # Lansăm workerul de ping ca să nu înghețe interfața modulară
-        self.ping_worker = PingWorker(ip_tinta)
-        self.ping_worker.rezultat_ping.connect(lambda txt: self.afiseaza_rezultat_ping(nume_tinta, txt))
-        self.ping_worker.start()
-
-    def afiseaza_rezultat_ping(self, nume, rezultat):
-        self.btn_ping.setEnabled(True)
-        self.btn_ping.setText("⚡ Dă Ping Manual")
-        
-        # Deschidem un popup curat stilizat peste tabel cu output-ul real din terminal
-        msg = QMessageBox(self)
-        msg.setWindowTitle(f"Ping Console — {nume}")
-        msg.setText(rezultat)
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setStyleSheet("background-color: #1e1e2e; color: #a6e3a1; font-family: monospace; font-size: 13px;")
-        msg.exec()
-
-
-    def deschide_meniu_contextual(self, pozitie):
-        rand = self.tabel.currentRow()
-        if rand == -1: return
-        
-        ip_selectat = self.tabel.item(rand, 1).text()
-        
-        from PyQt6.QtWidgets import QMenu
-        meniu = QMenu(self)
-        meniu.setStyleSheet("background-color: #313244; color: #cdd6f4; font-size: 13px;")
-        
-        act_copiaza = meniu.addAction("📋 Copiază Adresă IP")
-        actiune = meniu.exec(self.tabel.mapToGlobal(pozitie))
-        
-        if actiune == act_copiaza:
-            # Trimitem IP-ul direct în memoria clipboard a sistemului Linux!
-            clipboard = QApplication.instance().clipboard()
-            clipboard.setText(ip_selectat)
+        from PyQt6.QtWidgets import QInputDialog
+        L = self.traduceri[self.obtine_limba_curenta()]
+        ip, ok = QInputDialog.getText(self, L["ping_titlu"], L["ping_prompt"])
+        if ok and ip:
+            rez = subprocess.run(["ping", "-c", "1", "-W", "1", ip], stdout=subprocess.DEVNULL)
+            if rez.returncode == 0:
+                QMessageBox.information(self, "Ping", f"{L['ping_ok']} ({ip})")
+            else:
+                QMessageBox.critical(self, "Ping", f"{L['ping_err']} ({ip})")
