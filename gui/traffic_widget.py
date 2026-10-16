@@ -29,6 +29,7 @@ class TrafficMonitorWidget(QWidget):
         super().__init__(parent_win)
         self.parent_win = parent_win
         self.peak_dl = 0.0
+        self.istoric_grafic = [0] * 30
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -41,7 +42,7 @@ class TrafficMonitorWidget(QWidget):
                 "speed_title": "🚀 Internet Speedometer (Capacitate Maximă):",
                 "btn_speed": "⏱️ Pornește Speedtest", "btn_run": "⏳ Rulare...",
                 "lbl_dl": "Viteză Download:", "lbl_ul": "Viteză Upload:", "lbl_png": "Latență Ping:",
-                "graph_peak": "Real-time Traffic (Download Peak:"
+                "graph_peak": "Trafic în Timp Real (Vârf Download:"
             },
             "en": {
                 "title": "📊 Network Traffic & Internet Speedometer (Real-time):",
@@ -57,7 +58,7 @@ class TrafficMonitorWidget(QWidget):
                 "speed_title": "🚀 Internet Speedometer (Capacità Massima):",
                 "btn_speed": "⏱️ Avvia Speedtest", "btn_run": "⏳ Analisi...",
                 "lbl_dl": "Velocità Download:", "lbl_ul": "Velocità Upload:", "lbl_png": "Latenza Ping:",
-                "graph_peak": "Real-time Traffic (Download Peak:"
+                "graph_peak": "Traffico in Tempo Reale (Picco Download:"
             }
         }
 
@@ -65,9 +66,7 @@ class TrafficMonitorWidget(QWidget):
         self.lbl_titlu.setStyleSheet("font-size: 13px; font-weight: bold; color: #fab387;")
         layout.addWidget(self.lbl_titlu)
 
-        # Panourile superioare (Download / Upload Box)
         layout_boxuri = QHBoxLayout()
-        
         self.box_dl = QWidget(self)
         self.box_dl.setStyleSheet("background-color: #181825; border: 1px solid #a6e3a1; border-radius: 6px;")
         v_dl = QVBoxLayout(self.box_dl)
@@ -92,7 +91,6 @@ class TrafficMonitorWidget(QWidget):
         layout_boxuri.addWidget(self.box_ul)
         layout.addLayout(layout_boxuri)
 
-        # Secțiunea Speedtest
         layout_speed = QHBoxLayout()
         self.lbl_speed_title = QLabel(self)
         self.lbl_speed_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #89b4fa;")
@@ -105,7 +103,6 @@ class TrafficMonitorWidget(QWidget):
         layout_speed.addWidget(self.btn_speed)
         layout.addLayout(layout_speed)
 
-        # Etichetele cu rezultate Speedtest
         layout_rez = QHBoxLayout()
         self.lbl_res_dl = QLabel(self)
         self.lbl_res_ul = QLabel(self)
@@ -115,43 +112,38 @@ class TrafficMonitorWidget(QWidget):
             layout_rez.addWidget(lbl)
         layout.addLayout(layout_rez)
 
-        # Graficul ASCII de jos
         self.lbl_graph_title = QLabel(self)
-        self.lbl_graph_title.setStyleSheet("font-size: 11px; color: #f5e0dc;")
+        self.lbl_graph_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #f5e0dc; padding-top: 5px;")
         layout.addWidget(self.lbl_graph_title)
 
-        self.lbl_graph = QLabel(" . . . . . . . . . . . . . . . . . . . . .", self)
-        self.lbl_graph.setStyleSheet("font-family: monospace; font-size: 14px; color: #fab387; background-color: #11111b; padding: 10px; border-radius: 5px;")
+        self.lbl_graph = QLabel(self)
+        self.lbl_graph.setStyleSheet("font-family: monospace; font-size: 14px; color: #fab387; background-color: #0c0c12; padding: 12px; border-radius: 6px; border: 1px solid #313244;")
         layout.addWidget(self.lbl_graph)
 
-        # Temporizator kernel (/proc/net/dev)
         self.last_rx, self.last_tx = self.citeste_statistici_kernel()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.actualizeaza_metrice_realtime)
         self.timer.start(1000)
-
         self.actualizeaza_limba()
 
     def obtine_limba_curenta(self):
-        if self.parent_win and hasattr(self.parent_win, 'limba_curenta'):
-            return self.parent_win.limba_curenta
+        if self.parent_win and hasattr(self.parent_win, 'limba_curenta'): return self.parent_win.limba_curenta
         return "ro"
 
     def actualizeaza_limba(self):
         L = self.traduceri[self.obtine_limba_curenta()]
         self.lbl_titlu.setText(L["title"])
         self.lbl_speed_title.setText(L["speed_title"])
-        if self.btn_speed.isEnabled():
-            self.btn_speed.setText(L["btn_speed"])
+        if self.btn_speed.isEnabled(): self.btn_speed.setText(L["btn_speed"])
         self.lbl_res_dl.setText(f"{L['lbl_dl']} --")
         self.lbl_res_ul.setText(f"{L['lbl_ul']} --")
         self.lbl_res_png.setText(f"{L['lbl_png']} --")
         self.lbl_graph_title.setText(f"{L['graph_peak']} {self.peak_dl:.1f} KB/s)")
+        self.deseneaza_grafic_ascii()
 
     def citeste_statistici_kernel(self):
         try:
-            with open("/proc/net/dev", "r") as f:
-                linii = f.readlines()
+            with open("/proc/net/dev", "r") as f: linii = f.readlines()
             rx, tx = 0, 0
             for l in linii:
                 if ":" in l and not "lo:" in l:
@@ -164,29 +156,39 @@ class TrafficMonitorWidget(QWidget):
     def actualizeaza_metrice_realtime(self):
         L = self.traduceri[self.obtine_limba_curenta()]
         current_rx, current_tx = self.citeste_statistici_kernel()
-        
         diff_rx = (current_rx - self.last_rx) / 1024.0
         diff_tx = (current_tx - self.last_tx) / 1024.0
-        
         if diff_rx < 0: diff_rx = 0
         if diff_tx < 0: diff_tx = 0
-        
         if diff_rx > self.peak_dl: self.peak_dl = diff_rx
 
         self.lbl_val_dl.setText(f"📥 {diff_rx:.2f} KB/s")
         self.lbl_val_ul.setText(f"📤 {diff_tx:.2f} KB/s")
-        
         self.lbl_tot_rx.setText(f"{L['tot_rx']} {current_rx / (1024**3):.2f} GB")
         self.lbl_tot_tx.setText(f"{L['tot_tx']} {current_tx / (1024**3):.2f} GB")
         self.lbl_graph_title.setText(f"{L['graph_peak']} {self.peak_dl:.1f} KB/s)")
         
+        nivel_bara = min(7, int(diff_rx / 20)) if diff_rx > 2 else (1 if diff_rx > 0 else 0)
+        self.istoric_grafic.pop(0)
+        self.istoric_grafic.append(nivel_bara)
+        self.deseneaza_grafic_ascii()
         self.last_rx, self.last_tx = current_rx, current_tx
+
+    def deseneaza_grafic_ascii(self):
+        randuri_grafic = []
+        for nivel in range(7, -1, -1):
+            linie_rand = ""
+            for val in self.istoric_grafic:
+                if val >= nivel and nivel > 0: linie_rand += "█ "
+                elif val == 0 and nivel == 0: linie_rand += ". "
+                else: linie_rand += "  "
+            randuri_grafic.append(linie_rand)
+        self.lbl_graph.setText("\n".join(randuri_grafic))
 
     def porneste_speedtest(self):
         L = self.traduceri[self.obtine_limba_curenta()]
         self.btn_speed.setEnabled(False)
         self.btn_speed.setText(L["btn_run"])
-        
         self.worker = SpeedtestWorker()
         self.worker.rezultat.connect(self.afiseaza_rezultat_speedtest)
         self.worker.finalizat.connect(self.speedtest_gata)
