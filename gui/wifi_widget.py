@@ -10,28 +10,49 @@ class WifiWorker(QThread):
     def run(self):
         self.progres.emit(20)
         try:
-            # Rescanăm rețelele în fundal
+            import subprocess
             subprocess.run(["nmcli", "device", "wifi", "rescan"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.progres.emit(50)
             
-            # Folosim separatorul special pe bază de două spații sau aliniem fix pentru a nu fragmenta SSID-urile cu spații
-            output = subprocess.check_output(["nmcli", "-f", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "device", "wifi", "list"], text=True)
+            # Fenta supremă: Cerem nmcli să folosească o bară verticală '|' ca separator controlat!
+            output = subprocess.check_output(["nmcli", "-t", "-f", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "device", "wifi", "list"], text=True)
             linii = output.strip().split('\n')
             
-            if len(linii) > 1:
-                for linie in linii[1:]:
-                    if linie.strip() and not linie.startswith("SSID"):
-                        # Fenta de Senior: Parsăm de la dreapta la stânga pentru a izola coloanele fixe, lăsând SSID-ul cu spații intact!
-                        parti = linie.split()
-                        if len(parti) >= 5:
-                            securitate = parti[-1]
-                            semnal = f"📶 {parti[-2]}%"
-                            canal = parti[-3]
-                            bssid = parti[-4]
-                            # Recompunem SSID-ul complet, chiar dacă conține spații în nume
-                            ssid = " ".join(parti[:-4])
-                            if ssid == "*" or not ssid.strip(): ssid = "Wi-Fi Ascuns"
-                            self.retea_gasita.emit(ssid, bssid, canal, semnal, securitate)
+            for linie in linii:
+                if linie.strip():
+                    # Spargem linia strict după caracterul '|'
+                    parti = linie.split(':')
+                    # nmcli -t folosește uneori ':' ca separator, dar dacă BSSID are și el ':', e mai sigur să mapăm coloanele curat.
+                    # Pentru siguranță maximă împotriva semnelor ':' din adresele MAC, extragem invers sau folosim split custom:
+                    parti = linie.split('\\:') # nmcli banează separatorul nativ prin backslash
+                    
+            # Varianta cea mai curată și robustă de Senior pentru nmcli -t:
+            output = subprocess.check_output(["nmcli", "--terse", "--fields", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "device", "wifi", "list"], text=True)
+            for linie in output.strip().split('\n'):
+                if linie.strip():
+                    # În mod 'terse', nmcli separă prin caractere ':' dar le pune backslash celor din MAC.
+                    # O parsam invers, de la coadă la cap, despărțind după ':' curat
+                    parti = []
+                    rest = linie
+                    for _ in range(4):
+                        if ':' in rest:
+                            rest, _, bucata = rest.rpartition(':')
+                            parti.insert(0, bucata)
+                        else:
+                            parti.insert(0, rest)
+                            rest = ""
+                            break
+                    parti.insert(0, rest.replace('\\:', ':')) # Restaurăm adresa MAC sau SSID-ul dacă avea ':'
+                    
+                    if len(parti) >= 5:
+                        ssid = parti[0]
+                        bssid = parti[1]
+                        canal = parti[2]
+                        semnal = f"📶 {parti[3]}%"
+                        securitate = parti[4]
+                        
+                        if ssid == "*" or not ssid.strip(): ssid = "Wi-Fi Ascuns"
+                        self.retea_gasita.emit(ssid, bssid, canal, semnal, securitate)
         except Exception: 
             pass
         self.progres.emit(100)
