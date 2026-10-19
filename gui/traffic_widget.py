@@ -204,3 +204,19 @@ class TrafficMonitorWidget(QWidget):
         self.btn_speed.setEnabled(True)
         L = self.traduceri[self.obtine_limba_curenta()]
         self.btn_speed.setText(L["btn_speed"])
+        
+        # Interogăm direct serverul ip-api din Prato în mod securizat
+        try:
+            import urllib.request
+            import json
+            url_geo = "http://208.95.112.1/json"
+            req = urllib.request.Request(url_geo, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=3) as raspuns:
+                date_geo = json.loads(raspuns.read().decode())
+                if date_geo.get("status") == "success":
+                    geo_info = f" | 🌐 {date_geo.get('city')}, {date_geo.get('country')} ({date_geo.get('isp')})"
+                    # Preluăm textul curent din eticheta de ping și îi lipim locația la final
+                    text_curent = self.lbl_res_png.text()
+                    self.lbl_res_png.setText(f"{text_curent} {geo_info}")
+        except Exception as e:
+            with open("eroare_geo.txt", "w") as f: f.write(str(e))
