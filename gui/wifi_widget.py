@@ -10,23 +10,30 @@ class WifiWorker(QThread):
     def run(self):
         self.progres.emit(20)
         try:
+            # Rescanăm rețelele în fundal
             subprocess.run(["nmcli", "device", "wifi", "rescan"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.progres.emit(50)
+            
+            # Folosim separatorul special pe bază de două spații sau aliniem fix pentru a nu fragmenta SSID-urile cu spații
             output = subprocess.check_output(["nmcli", "-f", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "device", "wifi", "list"], text=True)
             linii = output.strip().split('\n')
+            
             if len(linii) > 1:
                 for linie in linii[1:]:
-                    if linie.strip():
+                    if linie.strip() and not linie.startswith("SSID"):
+                        # Fenta de Senior: Parsăm de la dreapta la stânga pentru a izola coloanele fixe, lăsând SSID-ul cu spații intact!
                         parti = linie.split()
-                        if len(parti) >= 4:
-                            ssid = " ".join(parti[:-4]) if len(parti) > 4 else parti
-                            if ssid == "*": ssid = "Wi-Fi"
-                            bssid = parti[-4] if len(parti) >= 5 else "00:11:22:33:44:55"
+                        if len(parti) >= 5:
                             securitate = parti[-1]
                             semnal = f"📶 {parti[-2]}%"
                             canal = parti[-3]
+                            bssid = parti[-4]
+                            # Recompunem SSID-ul complet, chiar dacă conține spații în nume
+                            ssid = " ".join(parti[:-4])
+                            if ssid == "*" or not ssid.strip(): ssid = "Wi-Fi Ascuns"
                             self.retea_gasita.emit(ssid, bssid, canal, semnal, securitate)
-        except Exception: pass
+        except Exception: 
+            pass
         self.progres.emit(100)
         self.finalizat.emit()
 
@@ -170,23 +177,41 @@ class WifiScannerWidget(QWidget):
         self.actualizeaza_limba()
 
     def conecteaza_la_retea(self):
+        """ Conectare inteligentă: folosește conexiunea salvată în Aura dacă există, altfel cere parola """
         L = self.traduceri[self.obtine_limba_curenta()]
         rand_selectat = self.tabel.currentRow()
         if rand_selectat == -1:
             QMessageBox.warning(self, "Warning", L["sel_err"])
             return
+            
         self.ssid_curent = self.tabel.item(rand_selectat, 0).text()
         securitate = self.tabel.item(rand_selectat, 4).text()
-        parola = ""
-        if securitate and securitate != "--" and "OPEN" not in securitate.upper():
-            parola, ok = QInputDialog.getText(self, L["pwd_titlu"], f"{L['pwd_text']} {self.ssid_curent}", QLineEdit.EchoMode.Password)
-            if not ok: return
-        self.bara_progres.setValue(50)
+        
+        self.bara_progres.setValue(30)
         self.btn_scaneaza.setEnabled(False)
         self.btn_laser.setEnabled(False)
         self.btn_conecteaza.setEnabled(False)
-        comanda = ["nmcli", "device", "wifi", "connect", self.ssid_curent]
-        if parola: comanda.extend(["password", parola])
+
+        # Fenta de Senior: Verificăm dacă Aura are deja salvat un profil pentru acest SSID
+        import subprocess
+        verificare_profil = subprocess.run(["nmcli", "connection", "show", self.ssid_curent], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        if verificare_profil.returncode == 0:
+            # Cazul 1: Profilul există deja în NetworkManager, îl pornim direct fără parolă!
+            comanda = ["nmcli", "connection", "up", self.ssid_curent]
+        else:
+            # Cazul 2: Rețea nouă. Cerem parola doar dacă nu este o rețea deschisă (OPEN)
+            parola = ""
+            if securitate and securitate != "--" and "OPEN" not in securitate.upper():
+                parola, ok = QInputDialog.getText(self, L["pwd_titlu"], f"{L['pwd_text']} {self.ssid_curent}", QLineEdit.EchoMode.Password)
+                if not ok:
+                    self.scansione_terminata()
+                    return
+            comanda = ["nmcli", "device", "wifi", "connect", self.ssid_curent]
+            if parola: 
+                comanda.extend(["password", parola])
+
+        self.bara_progres.setValue(60)
         self.conn_worker = WifiConnectWorker(comanda)
         self.conn_worker.finalizat.connect(self.conectare_finalizata)
         self.conn_worker.start()
@@ -197,10 +222,14 @@ class WifiScannerWidget(QWidget):
         self.btn_scaneaza.setEnabled(True)
         self.btn_laser.setEnabled(True)
         self.btn_conecteaza.setEnabled(True)
+        
+        # Ne asigurăm că transformăm octeții sau textul brut într-un șir curat
+        text_eroare = stderr.strip() if hasattr(stderr, 'strip') else str(stderr)
+        
         if returncode == 0:
             QMessageBox.information(self, L["con_ok"], f"{L['con_ok_text']} '{self.ssid_curent}'!")
         else:
-            QMessageBox.critical(self, L["con_err"], f"{L['con_err_text']} '{self.ssid_curent}'!\n\n{stderr}")
+            QMessageBox.critical(self, L["con_err"], f"{L['con_err_text']} '{self.ssid_curent}'!\n\n{text_eroare}")
 
     def declanseaza_laser_beam(self):
         self.actualizeaza_limba()

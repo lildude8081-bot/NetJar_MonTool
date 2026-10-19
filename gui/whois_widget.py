@@ -11,11 +11,72 @@ class WhoisWorker(QThread):
         self.tinta = tinta
 
     def run(self):
-        try:
-            out = subprocess.check_output(["whois", self.tinta], text=True, stderr=subprocess.STDOUT)
-            self.rezultat.emit(out)
-        except Exception as e:
-            self.rezultat.emit(f"Error executing Whois:\n{str(e)}")
+        tinta_curata = self.tinta.strip()
+        
+        # Preluăm dicționarul tradus trimis din widget
+        L = getattr(self, 'traducere_curenta', {
+            "lan_titlu": "🖥️ [ Diagnosticare LAN ] Detalii interne pentru IP:",
+            "lan_err_nume": "📌 Identificare Nume Rețea: Nu s-a putut obține prin niciun protocol.",
+            "lan_mac": "🍏 Adresă Fizică Dispozitiv (MAC):"
+        })
+        
+        if tinta_curata.startswith("192.168."):
+            detalii_lan = f"{L['lan_titlu']} {tinta_curata}\n"
+            detalii_lan += "="*60 + "\n\n"
+            
+            # 1. Încercăm să luăm numele de rețea prin mDNS / Avahi, DNS și nmblookup
+            try:
+                nume_out = "Nedetectat"
+                try:
+                    import subprocess
+                    avahi_out = subprocess.check_output(["avahi-resolve", "-a", tinta_curata], text=True, timeout=1)
+                    if avahi_out.strip():
+                        nume_out = avahi_out.split()[-1].strip()
+                except Exception:
+                    try:
+                        import socket
+                        nume_dns = socket.gethostbyaddr(tinta_curata)
+                        nume_out = nume_dns
+                    except Exception:
+                        nmb_out = subprocess.check_output(["nmblookup", "-A", tinta_curata], text=True, stderr=subprocess.STDOUT)
+                        for linie in nmb_out.split("\n"):
+                            if "<00>" in linie and "GROUP" not in linie:
+                                nume_out = linie.split().strip()
+                                break
+                
+                if nume_out == "Nedetectat":
+                    detalii_lan += f"{L['lan_err_nume']}\n\n"
+                else:
+                    detalii_lan += f"📌 Nume: {nume_out}\n\n"
+            except Exception:
+                detalii_lan += f"{L['lan_err_nume']}\n\n"
+            
+            # 2. Citim direct din /proc/net/arp pentru a ocoli parantezele din comanda 'arp'
+            try:
+                import os
+                mac_gasit = "Nu este în cache-ul ARP"
+                if os.path.exists("/proc/net/arp"):
+                    with open("/proc/net/arp", "r") as f:
+                        linii = f.readlines()
+                    for linie in linii:
+                        parti = linie.split()
+                        if len(parti) >= 4 and parti[0] == tinta_curata:
+                            mac_gasit = parti[3].upper()
+                            break
+                # REPARAT: Folosim dinamic cheia din dicționar, fără text fix în română!
+                detalii_lan += f"{L['lan_mac']} {mac_gasit}\n"
+            except Exception:
+                detalii_lan += f"{L['lan_mac']} {mac_gasit}\n"
+                
+            self.rezultat.emit(detalii_lan)
+        else:
+            try:
+                import subprocess
+                out = subprocess.check_output(["whois", tinta_curata], text=True, stderr=subprocess.STDOUT)
+                self.rezultat.emit(out)
+            except Exception as e:
+                self.rezultat.emit(f"Error executing Whois:\n{str(e)}")
+                
         self.finalizat.emit()
 
 class WhoisWidget(QWidget):
@@ -33,19 +94,28 @@ class WhoisWidget(QWidget):
                 "lbl_info": "ℹ️ Investigare Identitate Rețea (Cine este în spatele IP-ului / Domeniului):",
                 "btn_cauta": "🔍 Investighează", "btn_run": "⏳ Căutare...",
                 "ph_text": "Introduceți un IP de pe ecran (ex: 192.168.0.1) sau un domeniu public (ex: google.com)",
-                "err_titlu": "Eroare", "err_text": "Vă rugăm să introduceți o adresă IP sau un domeniu valid!"
+                "err_titlu": "Eroare", "err_text": "Vă rugăm să introduceți o adresă IP sau un domeniu valid!",
+                "lan_titlu": "🖥️ [ Diagnosticare LAN ] Detalii interne pentru IP:",
+                "lan_err_nume": "📌 Identificare Nume Rețea: Nu s-a putut obține prin niciun protocol.",
+                "lan_mac": "🍏 Adresă Fizică Dispozitiv (MAC):"
             },
             "en": {
                 "lbl_info": "ℹ️ Network Identity Investigation (Whois lookup for IP / Domain):",
                 "btn_cauta": "🔍 Investigate", "btn_run": "⏳ Searching...",
                 "ph_text": "Enter an IP address (e.g., 192.168.0.1) or a public domain (e.g., google.com)",
-                "err_titlu": "Error", "err_text": "Please enter a valid IP address or domain name!"
+                "err_titlu": "Error", "err_text": "Please enter a valid IP address or domain name!",
+                "lan_titlu": "🖥️ [ LAN Diagnostics ] Internal details for IP:",
+                "lan_err_nume": "📌 Network Name Identification: Could not be resolved by any protocol.",
+                "lan_mac": "🍏 Device Physical Address (MAC):"
             },
             "it": {
                 "lbl_info": "ℹ️ Investigazione Identità Rete (Whois lookup per IP / Dominio):",
                 "btn_cauta": "🔍 Investiga", "btn_run": "⏳ Ricerca...",
                 "ph_text": "Inserisci un indirizzo IP (es: 192.168.0.1) o un dominio pubblico (es: google.com)",
-                "err_titlu": "Errore", "err_text": "Per favore inserisci un indirizzo IP o un dominio valido!"
+                "err_titlu": "Errore", "err_text": "Per favore inserisci un indirizzo IP o un dominio valido!",
+                "lan_titlu": "🖥️ [ Diagnostica LAN ] Dettagli interni per IP:",
+                "lan_err_nume": "📌 Identificazione Nome Rete: Impossibile risolvere con qualsiasi protocollo.",
+                "lan_mac": "🍏 Indirizzo Fisico Dispositivo (MAC):"
             }
         }
 
@@ -99,6 +169,9 @@ class WhoisWidget(QWidget):
         self.consola.clear()
 
         self.worker = WhoisWorker(tinta)
+        # CONDUCTA SALVATOARE: Pasăm dicționarul tradus direct în creierul worker-ului!
+        self.worker.traducere_curenta = L
+        
         self.worker.rezultat.connect(self.consola.setText)
         self.worker.finalizat.connect(self.whois_gata)
         self.worker.start()
