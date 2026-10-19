@@ -14,7 +14,7 @@ class NetJarMonTool(QMainWindow):
         super().__init__()
         self.limba_curenta = "ro" # Limba implicită la pornire
         
-        self.setWindowTitle("🌐 NetJar MonTool v1.0.0")
+        self.setWindowTitle("🌐 NetJar MonTool v2.0.0")
         self.resize(1000, 720)
         self.setStyleSheet("background-color: #1e1e2e; color: #cdd6f4; font-family: Arial;")
         
